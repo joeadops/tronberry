@@ -9,7 +9,6 @@
 #include <string>
 #include <thread>
 
-#include "graphics.h"
 #include "httplib.h"
 #include "led-matrix.h"
 
