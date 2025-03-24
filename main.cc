@@ -22,18 +22,14 @@ static void DrawFrame(FrameCanvas* canvas, const uint8_t* frame_data, int width,
     }
 }
 
-static void DisplayImage(RGBMatrix* matrix, const uint8_t* image_data, int width, int height, int brightness, int dwell_secs) {
-    FrameCanvas* canvas = matrix->CreateFrameCanvas();
-
+static void DisplayImage(RGBMatrix* matrix, FrameCanvas *&canvas, const uint8_t* image_data, int width, int height, int brightness, int dwell_secs) {
     DrawFrame(canvas, image_data, width, height);
 
     canvas = matrix->SwapOnVSync(canvas);
     std::this_thread::sleep_for(std::chrono::seconds(dwell_secs));
 }
 
-static void DisplayAnimation(RGBMatrix* matrix, WebPAnimDecoder* anim_decoder, int width, int height, int brightness, int dwell_secs) {
-    FrameCanvas* canvas = matrix->CreateFrameCanvas();
-
+static void DisplayAnimation(RGBMatrix* matrix, FrameCanvas *&canvas, WebPAnimDecoder* anim_decoder, int width, int height, int brightness, int dwell_secs) {
     auto start_time = std::chrono::steady_clock::now();
     uint8_t* frame_data;
     int timestamp;
@@ -108,6 +104,8 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    FrameCanvas* offscreen_canvas = matrix->CreateFrameCanvas();
+
     std::atomic<bool> running(true);
     std::mutex queue_mutex;
     std::condition_variable queue_not_full;
@@ -178,12 +176,12 @@ int main(int argc, char* argv[]) {
             WebPAnimDecoderGetInfo(anim_decoder, &anim_info);
 
             if (anim_info.frame_count > 1) {
-                DisplayAnimation(matrix, anim_decoder, anim_info.canvas_width, anim_info.canvas_height, response.brightness, response.dwell_secs);
+                DisplayAnimation(matrix, offscreen_canvas, anim_decoder, anim_info.canvas_width, anim_info.canvas_height, response.brightness, response.dwell_secs);
             } else {
                 uint8_t* frame_data;
                 int timestamp;
                 WebPAnimDecoderGetNext(anim_decoder, &frame_data, &timestamp);
-                DisplayImage(matrix, frame_data, anim_info.canvas_width, anim_info.canvas_height, response.brightness, response.dwell_secs);
+                DisplayImage(matrix, offscreen_canvas, frame_data, anim_info.canvas_width, anim_info.canvas_height, response.brightness, response.dwell_secs);
             }
 
             WebPAnimDecoderDelete(anim_decoder);
@@ -191,7 +189,7 @@ int main(int argc, char* argv[]) {
             int width, height;
             uint8_t* image_data = WebPDecodeRGBA(webp_data.bytes, webp_data.size, &width, &height);
             if (image_data) {
-                DisplayImage(matrix, image_data, width, height, response.brightness, response.dwell_secs);
+                DisplayImage(matrix, offscreen_canvas, image_data, width, height, response.brightness, response.dwell_secs);
                 WebPFree(image_data);
             } else {
                 std::cerr << "Failed to decode WebP image" << std::endl;
