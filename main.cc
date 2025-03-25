@@ -11,6 +11,7 @@
 
 #include "httplib.h"
 #include "led-matrix.h"
+#include "startup.h"
 
 using namespace rgb_matrix;
 
@@ -83,6 +84,7 @@ int main(int argc, char *argv[]) {
   matrix_options.cols = 64;
   matrix_options.chain_length = 1;
   matrix_options.parallel = 1;
+  matrix_options.brightness = INITIAL_BRIGHTNESS;
   matrix_options.hardware_mapping = "regular";
 
   RuntimeOptions runtime_options;
@@ -136,11 +138,19 @@ int main(int argc, char *argv[]) {
   std::queue<ResponseData> response_queue;
   const size_t max_queue_size = 1;
 
+  // Display the startup image
+  ResponseData startup_response;
+  startup_response.data = std::string(
+      reinterpret_cast<const char *>(STARTUP_WEBP), STARTUP_WEBP_LEN);
+  startup_response.brightness = INITIAL_BRIGHTNESS;
+  startup_response.dwell_secs = INITIAL_DWELL_SECS;
+  response_queue.push(std::move(startup_response));
+
   // Thread to fetch the next image
   std::thread fetch_thread([&]() {
     int retry_count = 0;
     while (running) {
-      //std::cout << "Fetching the next image from URL: " << url << std::endl;
+      // std::cout << "Fetching the next image from URL: " << url << std::endl;
       auto res = client.Get(path.c_str());
       if (!res || res->status != 200) {
         std::cerr << "Failed to fetch image from URL: " << url << std::endl;

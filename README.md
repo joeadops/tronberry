@@ -2,6 +2,8 @@
 
 A daemon to fetch images from Tronbyt and display on a matrix LED display connected to a Raspberry Pi.
 
+It has only been tested with a Raspberry Pi Zero 2W, but should work with all devices supported by https://github.com/hzeller/rpi-rgb-led-matrix.
+
 ## Installation
 
 In order to avoid flickering, follow these steps (taken from https://github.com/hzeller/rpi-rgb-led-matrix?tab=readme-ov-file#troubleshooting):
@@ -18,7 +20,7 @@ sudo update-initramfs -u
 ```
 - Reboot
 
-Now build the Tronbyt client:
+Now build the Tronbyt client on your Pi:
 
 ```sh
 # Install dependencies

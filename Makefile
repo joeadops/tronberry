@@ -4,7 +4,7 @@ LIBPATHS := -L/usr/local/lib -L/opt/homebrew/lib
 LDFLAGS := -lwebp -lwebpdemux -lssl -lcrypto
 CXXFLAGS := -O3 -W -Wall -Wextra -Wno-unused-parameter -D_FILE_OFFSET_BITS=64 -std=c++17 $(INCLUDES) $(LIBPATHS)
 TARGET := main
-SRCS := main.cc
+SRCS := main.cc startup.cc
 RGB_LIB_DISTRIBUTION=rpi-rgb-led-matrix
 RGB_INCDIR=$(RGB_LIB_DISTRIBUTION)/include
 RGB_LIBDIR=$(RGB_LIB_DISTRIBUTION)/lib
