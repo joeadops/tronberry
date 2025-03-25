@@ -16,7 +16,14 @@
 using namespace rgb_matrix;
 
 static std::atomic<bool> running(true);
-static void InterruptHandler(int) { running = false; }
+static std::condition_variable queue_not_full;
+static std::condition_variable queue_not_empty;
+
+static void InterruptHandler(int) {
+  running = false;
+  queue_not_empty.notify_all();
+  queue_not_full.notify_all();
+}
 
 static void DrawFrame(FrameCanvas *canvas, const uint8_t *frame_data, int width,
                       int height) {
@@ -35,6 +42,9 @@ static void DisplayImage(RGBMatrix *matrix, FrameCanvas *&canvas,
   DrawFrame(canvas, image_data, width, height);
 
   canvas = matrix->SwapOnVSync(canvas);
+  if (!running) {
+    return;
+  }
   std::this_thread::sleep_for(std::chrono::seconds(dwell_secs));
 }
 
@@ -58,11 +68,19 @@ static void DisplayAnimation(RGBMatrix *matrix, FrameCanvas *&canvas,
 
     canvas = matrix->SwapOnVSync(canvas);
 
+    if (!running) {
+      break;
+    }
+    
     int delay_ms = timestamp - prev_timestamp;
     if (delay_ms > 0) {
       std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
     }
     prev_timestamp = timestamp;
+
+    if (!running) {
+      break;
+    }
   }
 }
 
@@ -128,8 +146,6 @@ int main(int argc, char *argv[]) {
   signal(SIGINT, InterruptHandler);
 
   std::mutex queue_mutex;
-  std::condition_variable queue_not_full;
-  std::condition_variable queue_not_empty;
   struct ResponseData {
     std::string data;
     int brightness;
@@ -200,7 +216,11 @@ int main(int argc, char *argv[]) {
     ResponseData response;
     {
       std::unique_lock<std::mutex> lock(queue_mutex);
-      queue_not_empty.wait(lock, [&]() { return !response_queue.empty(); });
+      queue_not_empty.wait(
+          lock, [&]() { return !response_queue.empty() || !running; });
+      if (!running) {
+        break;
+      }
 
       response = std::move(response_queue.front());
       response_queue.pop();
