@@ -16,7 +16,7 @@ RGB_LDFLAGS+=-L$(RGB_LIBDIR) -l$(RGB_LIBRARY_NAME) -lrt -lm -lpthread
 
 all: $(TARGET)
 
-$(RGB_LIBRARY):
+$(RGB_LIBRARY): check-and-reinit-submodules
 	$(MAKE) -C $(RGB_LIBDIR)
 
 $(TARGET): $(SRCS) $(RGB_LIBRARY)
@@ -24,5 +24,12 @@ $(TARGET): $(SRCS) $(RGB_LIBRARY)
 
 clean:
 	rm -f $(TARGET)
+
+.PHONY: check-and-reinit-submodules
+check-and-reinit-submodules:
+	@if git submodule status | egrep -q '^[-+]' ; then \
+		echo "INFO: Need to reinitialize git submodules"; \
+		git submodule update --init; \
+	fi
 
 .PHONY: all clean $(RGB_LIBRARY)
