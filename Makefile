@@ -1,6 +1,4 @@
-# Makefile to build main.cc
-
-CXX := g++
+CXX ?= g++
 INCLUDES := -I/usr/local/include -I/opt/homebrew/include
 LIBPATHS := -L/usr/local/lib -L/opt/homebrew/lib
 LDFLAGS := -lwebp -lwebpdemux -lssl -lcrypto

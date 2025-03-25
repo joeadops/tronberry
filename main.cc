@@ -140,7 +140,7 @@ int main(int argc, char *argv[]) {
   std::thread fetch_thread([&]() {
     int retry_count = 0;
     while (running) {
-      std::cout << "Fetching the next image from URL: " << url << std::endl;
+      //std::cout << "Fetching the next image from URL: " << url << std::endl;
       auto res = client.Get(path.c_str());
       if (!res || res->status != 200) {
         std::cerr << "Failed to fetch image from URL: " << url << std::endl;
@@ -159,9 +159,9 @@ int main(int argc, char *argv[]) {
       response.data = std::move(res->body);
       try {
         response.brightness =
-        std::stoi(res->get_header_value("Tronbyt-Brightness", "0"));
+            std::stoi(res->get_header_value("Tronbyt-Brightness", "0"));
         response.dwell_secs =
-        std::stoi(res->get_header_value("Tronbyt-Dwell-Secs", "0"));
+            std::stoi(res->get_header_value("Tronbyt-Dwell-Secs", "0"));
       } catch (const std::invalid_argument &e) {
         std::cerr << "Invalid header value: " << e.what() << std::endl;
         response.brightness = 0;
@@ -174,8 +174,12 @@ int main(int argc, char *argv[]) {
 
       {
         std::unique_lock<std::mutex> lock(queue_mutex);
-        queue_not_full.wait(
-            lock, [&]() { return response_queue.size() < max_queue_size; });
+        queue_not_full.wait(lock, [&]() {
+          return response_queue.size() < max_queue_size || !running;
+        });
+        if (!running) {
+          break;
+        }
         response_queue.push(std::move(response));
       }
       queue_not_empty.notify_one();
