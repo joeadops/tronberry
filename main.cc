@@ -157,10 +157,20 @@ int main(int argc, char *argv[]) {
 
       ResponseData response;
       response.data = std::move(res->body);
-      response.brightness =
-          std::stoi(res->get_header_value("Tronbyt-Brightness"));
-      response.dwell_secs =
-          std::stoi(res->get_header_value("Tronbyt-Dwell-Secs"));
+      try {
+        response.brightness =
+        std::stoi(res->get_header_value("Tronbyt-Brightness", "0"));
+        response.dwell_secs =
+        std::stoi(res->get_header_value("Tronbyt-Dwell-Secs", "0"));
+      } catch (const std::invalid_argument &e) {
+        std::cerr << "Invalid header value: " << e.what() << std::endl;
+        response.brightness = 0;
+        response.dwell_secs = 0;
+      } catch (const std::out_of_range &e) {
+        std::cerr << "Header value out of range: " << e.what() << std::endl;
+        response.brightness = 0;
+        response.dwell_secs = 0;
+      }
 
       {
         std::unique_lock<std::mutex> lock(queue_mutex);
