@@ -3,7 +3,7 @@
 CXX := g++
 INCLUDES := -I/usr/local/include -I/opt/homebrew/include
 LIBPATHS := -L/usr/local/lib -L/opt/homebrew/lib
-LDFLAGS := -lwebp -lwebpdemux -lsharpyuv -lssl -lcrypto
+LDFLAGS := -lwebp -lwebpdemux -lssl -lcrypto
 CXXFLAGS := -O3 -W -Wall -Wextra -Wno-unused-parameter -D_FILE_OFFSET_BITS=64 -std=c++17 $(INCLUDES) $(LIBPATHS)
 TARGET := main
 SRCS := main.cc
