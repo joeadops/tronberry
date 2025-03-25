@@ -78,6 +78,21 @@ static int usage(const char *progname, const char *msg = NULL) {
 }
 
 int main(int argc, char *argv[]) {
+  RGBMatrix::Options matrix_options;
+  matrix_options.rows = 32;
+  matrix_options.cols = 64;
+  matrix_options.chain_length = 1;
+  matrix_options.parallel = 1;
+  matrix_options.hardware_mapping = "regular";
+
+  RuntimeOptions runtime_options;
+  runtime_options.gpio_slowdown = 2;
+  runtime_options.drop_privileges = true;
+
+  if (!ParseOptionsFromFlags(&argc, &argv, &matrix_options, &runtime_options)) {
+    return usage(argv[0]);
+  }
+
   if (argc != 2) {
     usage(argv[0], "Invalid number of arguments");
     return 1;
@@ -98,21 +113,6 @@ int main(int argc, char *argv[]) {
   std::string path = path_start != std::string::npos
                          ? url.substr(path_start)
                          : "/";  // Extract path or default to "/"
-
-  RGBMatrix::Options matrix_options;
-  matrix_options.rows = 32;
-  matrix_options.cols = 64;
-  matrix_options.chain_length = 1;
-  matrix_options.parallel = 1;
-  matrix_options.hardware_mapping = "regular";
-
-  RuntimeOptions runtime_options;
-  runtime_options.gpio_slowdown = 2;
-  runtime_options.drop_privileges = true;
-
-  if (!ParseOptionsFromFlags(&argc, &argv, &matrix_options, &runtime_options)) {
-    return usage(argv[0]);
-  }
 
   RGBMatrix *matrix = CreateMatrixFromOptions(matrix_options, runtime_options);
   if (!matrix) {
