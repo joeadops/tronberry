@@ -3,7 +3,7 @@ INCLUDES := -I/usr/local/include -I/opt/homebrew/include
 LIBPATHS := -L/usr/local/lib -L/opt/homebrew/lib
 LDFLAGS := -lwebp -lwebpdemux -lssl -lcrypto
 CXXFLAGS := -O3 -W -Wall -Wextra -Wno-unused-parameter -D_FILE_OFFSET_BITS=64 -std=c++17 $(INCLUDES) $(LIBPATHS)
-TARGET := main
+TARGET := tronberry
 SRCS := main.cc startup.cc
 RGB_LIB_DISTRIBUTION=rpi-rgb-led-matrix
 RGB_INCDIR=$(RGB_LIB_DISTRIBUTION)/include
@@ -18,7 +18,7 @@ $(RGB_LIBRARY): check-and-reinit-submodules
 	$(MAKE) -C $(RGB_LIBDIR)
 
 $(TARGET): $(SRCS) $(RGB_LIBRARY)
-	$(CXX) -I$(RGB_INCDIR) $(CXXFLAGS) -o tronbyt $^ $(LDFLAGS) $(RGB_LDFLAGS)
+	$(CXX) -I$(RGB_INCDIR) $(CXXFLAGS) -o $(TARGET) $^ $(LDFLAGS) $(RGB_LDFLAGS)
 
 clean:
 	rm -f $(TARGET)
