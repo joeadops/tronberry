@@ -47,6 +47,7 @@ If you want to start this at startup, create `/etc/systemd/system/tronbyt.servic
 ```
 [Unit]
 Description=Tronbyt
+After=multi-user.target
 
 [Service]
 ExecStart=<PATH_TO_TRONBYT> <TRONBYT_URL>
@@ -56,4 +57,6 @@ Restart=always
 WantedBy=multi-user.target
 ```
 
-To start the newly created service, run `sudo systemctl start tronbyt`.
+Then run `sudo systemctl enable tronbyt` to enable the new service.
+
+To start it manually, run `sudo systemctl start tronbyt`.
