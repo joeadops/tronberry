@@ -1,5 +1,3 @@
-#define CPPHTTPLIB_OPENSSL_SUPPORT
-
 #include <webp/decode.h>
 #include <webp/demux.h>
 
@@ -183,18 +181,22 @@ int main(int argc, char *argv[]) {
 
       ResponseData response;
       response.data = std::move(res->body);
-      try {
-        response.brightness =
-            std::stoi(res->get_header_value("Tronbyt-Brightness", "0"));
-        response.dwell_secs =
-            std::stoi(res->get_header_value("Tronbyt-Dwell-Secs", "0"));
-      } catch (const std::invalid_argument &e) {
-        std::cerr << "Invalid header value: " << e.what() << std::endl;
+      auto brightness_str = res->get_header_value("Tronbyt-Brightness", "0");
+      auto dwell_secs_str = res->get_header_value("Tronbyt-Dwell-Secs", "0");
+
+      char *end_ptr = nullptr;
+      response.brightness = std::strtol(brightness_str.c_str(), &end_ptr, 10);
+      if (*end_ptr != '\0') {
+        std::cerr << "Invalid brightness header value: " << brightness_str
+                  << std::endl;
         response.brightness = 0;
-        response.dwell_secs = 0;
-      } catch (const std::out_of_range &e) {
-        std::cerr << "Header value out of range: " << e.what() << std::endl;
-        response.brightness = 0;
+      }
+
+      end_ptr = nullptr;
+      response.dwell_secs = std::strtol(dwell_secs_str.c_str(), &end_ptr, 10);
+      if (*end_ptr != '\0') {
+        std::cerr << "Invalid dwell_secs header value: " << dwell_secs_str
+                  << std::endl;
         response.dwell_secs = 0;
       }
 

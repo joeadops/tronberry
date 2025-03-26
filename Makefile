@@ -1,8 +1,10 @@
 CXX ?= g++
 INCLUDES := -I/usr/local/include -I/opt/homebrew/include
 LIBPATHS := -L/usr/local/lib -L/opt/homebrew/lib
-LDFLAGS := -lwebp -lwebpdemux -lssl -lcrypto
-CXXFLAGS := -O3 -W -Wall -Wextra -Wno-unused-parameter -D_FILE_OFFSET_BITS=64 -std=c++17 $(INCLUDES) $(LIBPATHS)
+LDFLAGS := $(LIBPATHS) -lwebp -lwebpdemux -lssl -lcrypto
+CPPFLAGS=-D_FILE_OFFSET_BITS=64 -DCPPHTTPLIB_OPENSSL_SUPPORT -DCPPHTTPLIB_NO_EXCEPTIONS $(INCLUDES)
+CFLAGS=-W -Wall -Wextra -Wno-unused-parameter -O3 -fPIC -march=native
+CXXFLAGS :=$(CFLAGS) -fno-exceptions -std=c++17
 TARGET := tronberry
 SRCS := main.cc startup.cc
 RGB_LIB_DISTRIBUTION=rpi-rgb-led-matrix
@@ -15,10 +17,10 @@ RGB_LDFLAGS+=-L$(RGB_LIBDIR) -l$(RGB_LIBRARY_NAME) -lrt -lm -lpthread
 all: $(TARGET)
 
 $(RGB_LIBRARY): check-and-reinit-submodules
-	$(MAKE) -C $(RGB_LIBDIR)
+	$(MAKE) -C $(RGB_LIBDIR) CFLAGS="$(CFLAGS) -DDEFAULT_HARDWARE='\"regular\"'"
 
 $(TARGET): $(SRCS) $(RGB_LIBRARY)
-	$(CXX) -I$(RGB_INCDIR) $(CXXFLAGS) -o $(TARGET) $^ $(LDFLAGS) $(RGB_LDFLAGS)
+	$(CXX) $(CPPFLAGS) -I$(RGB_INCDIR) $(CXXFLAGS) -o $(TARGET) $^ $(LDFLAGS) $(RGB_LDFLAGS)
 
 clean:
 	rm -f $(TARGET)
