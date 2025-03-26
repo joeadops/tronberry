@@ -38,7 +38,7 @@ jobs:
       - name: Fetch Release Artifacts
         uses: actions/download-artifact@v4
         with:
-          path: tronbyt
+          path: build
 
       - name: Create Release
         env:
@@ -49,4 +49,4 @@ jobs:
               --repo="${GITHUB_REPOSITORY}" \
               --title="${GITHUB_REPOSITORY#*/} ${tag#v}" \
               --generate-notes \
-              tronbyt
+              build/tronbyt/*

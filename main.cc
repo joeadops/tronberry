@@ -71,7 +71,7 @@ static void DisplayAnimation(RGBMatrix *matrix, FrameCanvas *&canvas,
     if (!running) {
       break;
     }
-    
+
     int delay_ms = timestamp - prev_timestamp;
     if (delay_ms > 0) {
       std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));

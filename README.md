@@ -20,7 +20,7 @@ sudo update-initramfs -u
 ```
 - Reboot
 
-Now build the Tronbyt client on your Pi:
+Now download either the latest binary release from https://github.com/IngmarStein/tronbyt-rpi/releases onto your Pi or build the Tronbyt client yourself on the device:
 
 ```sh
 # Install dependencies
