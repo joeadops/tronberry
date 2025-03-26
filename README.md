@@ -42,7 +42,9 @@ make
 sudo ./tronbyt ${TRONBYT_URL}
 ```
 
-If you want to start this at startup, create `/etc/systemd/system/tronbyt.service` with the following content:
+If you use `tronbyt` with the original Tidbyt display, add the `--led-panel-type=FM6126A` flag. For a list of available options, run `./tronbyt --help`, there are many knobs to tweak.
+
+To start `tronbyt` at startup, create `/etc/systemd/system/tronbyt.service` with the following content:
 
 ```
 [Unit]
