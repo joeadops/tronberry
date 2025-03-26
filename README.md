@@ -46,13 +46,13 @@ If you use `tronberry` with the original Tidbyt display, add the `--led-panel-ty
 
 To start `tronberry` at startup, create `/etc/systemd/system/tronberry.service` with the following content:
 
-```
+```ini
 [Unit]
 Description=Tronberry
-After=multi-user.target
+After=network-online.target
 
 [Service]
-ExecStart=<PATH_TO_TRONBERRY> <TRONBYT_URL>
+ExecStart=<ABSOLUTE_PATH_TO_TRONBERRY> <TRONBYT_URL>
 Restart=always
 
 [Install]
