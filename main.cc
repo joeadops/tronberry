@@ -128,6 +128,9 @@ int main(int argc, char *argv[]) {
   httplib::Client client(url.substr(
       0, path_start != std::string::npos ? path_start
                                          : url.length()));  // Extract base URL
+  client.set_default_headers(
+      {{"User-Agent", "Tronberry/1.0"},
+       {"Accept", "image/webp, image/*;q=0.8, */*;q=0.5"}});
   std::string path = path_start != std::string::npos
                          ? url.substr(path_start)
                          : "/";  // Extract path or default to "/"

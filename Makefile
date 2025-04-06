@@ -2,7 +2,7 @@ CXX ?= g++
 INCLUDES := -I/usr/local/include -I/opt/homebrew/include
 LIBPATHS := -L/usr/local/lib -L/opt/homebrew/lib
 LDFLAGS := $(LIBPATHS) -lwebp -lwebpdemux -lssl -lcrypto
-CPPFLAGS=-D_FILE_OFFSET_BITS=64 -DCPPHTTPLIB_OPENSSL_SUPPORT -DCPPHTTPLIB_NO_EXCEPTIONS $(INCLUDES)
+CPPFLAGS=-D_FILE_OFFSET_BITS=64 -DCPPHTTPLIB_OPENSSL_SUPPORT -DCPPHTTPLIB_NO_EXCEPTIONS -DCPPHTTPLIB_NO_DEFAULT_USER_AGENT $(INCLUDES)
 CFLAGS=-W -Wall -Wextra -Wno-unused-parameter -O3 -fPIC -march=native
 CXXFLAGS :=$(CFLAGS) -fno-exceptions -std=c++17
 TARGET := tronberry
