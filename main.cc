@@ -169,7 +169,9 @@ int main(int argc, char *argv[]) {
   startup_response.data = std::string(
       reinterpret_cast<const char *>(STARTUP_WEBP), STARTUP_WEBP_LEN);
   startup_response.brightness = INITIAL_BRIGHTNESS;
-  startup_response.dwell_secs = INITIAL_DWELL_SECS;
+  if (!use_websocket) {
+   startup_response.dwell_secs = INITIAL_DWELL_SECS;
+  }
   response_queue.push(std::move(startup_response));
 
   auto add_to_queue = [&](ResponseData response) {
