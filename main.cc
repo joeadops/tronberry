@@ -170,7 +170,7 @@ int main(int argc, char *argv[]) {
       reinterpret_cast<const char *>(STARTUP_WEBP), STARTUP_WEBP_LEN);
   startup_response.brightness = INITIAL_BRIGHTNESS;
   if (!use_websocket) {
-   startup_response.dwell_secs = INITIAL_DWELL_SECS;
+    startup_response.dwell_secs = INITIAL_DWELL_SECS;
   }
   response_queue.push(std::move(startup_response));
 
@@ -189,7 +189,7 @@ int main(int argc, char *argv[]) {
   std::thread fetch_thread;
   ix::WebSocket ws_client;
   if (use_websocket) {
-    int brightness = INITIAL_BRIGHTNESS;
+    std::atomic<int> brightness(INITIAL_BRIGHTNESS);
     ws_client.setUrl(url);
     ws_client.enableAutomaticReconnection();
     ws_client.setOnMessageCallback([&](const ix::WebSocketMessagePtr &msg) {
@@ -200,7 +200,7 @@ int main(int argc, char *argv[]) {
         if (msg->binary) {
           ResponseData response;
           response.data = msg->str;
-          response.brightness = brightness;
+          response.brightness = brightness.load();
           response.dwell_secs = -1;
           add_to_queue(std::move(response));
         } else {
@@ -210,12 +210,9 @@ int main(int argc, char *argv[]) {
             return;
           }
 
-          // std::cout << "Received JSON message: " << json_message.dump(4)
-          //           << std::endl;
-
           if (json_message.contains("brightness") &&
               json_message["brightness"].is_number_integer()) {
-            brightness = json_message["brightness"].get<int>();
+            brightness.store(json_message["brightness"].get<int>());
           } else if (json_message.contains("status") &&
                      json_message["status"].is_string() &&
                      json_message.contains("message") &&
