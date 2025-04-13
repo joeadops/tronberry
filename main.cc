@@ -16,6 +16,7 @@
 using namespace rgb_matrix;
 
 static std::atomic<bool> running(true);
+static std::atomic<int> brightness(INITIAL_BRIGHTNESS);
 static std::condition_variable queue_not_full;
 static std::condition_variable queue_not_empty;
 
@@ -165,13 +166,10 @@ int main(int argc, char *argv[]) {
   const size_t max_queue_size = 1;
 
   // Display the startup image
-  ResponseData startup_response;
-  startup_response.data = std::string(
-      reinterpret_cast<const char *>(STARTUP_WEBP), STARTUP_WEBP_LEN);
-  startup_response.brightness = INITIAL_BRIGHTNESS;
-  if (!use_websocket) {
-    startup_response.dwell_secs = INITIAL_DWELL_SECS;
-  }
+  ResponseData startup_response = {
+      std::string(reinterpret_cast<const char *>(STARTUP_WEBP),
+                  STARTUP_WEBP_LEN),
+      INITIAL_BRIGHTNESS, use_websocket ? 0 : INITIAL_DWELL_SECS};
   response_queue.push(std::move(startup_response));
 
   auto add_to_queue = [&](ResponseData response) {
@@ -189,7 +187,6 @@ int main(int argc, char *argv[]) {
   std::thread fetch_thread;
   ix::WebSocket ws_client;
   if (use_websocket) {
-    std::atomic<int> brightness(INITIAL_BRIGHTNESS);
     ws_client.setUrl(url);
     ws_client.enableAutomaticReconnection();
     ws_client.setOnMessageCallback([&](const ix::WebSocketMessagePtr &msg) {
@@ -198,10 +195,7 @@ int main(int argc, char *argv[]) {
       }
       if (msg->type == ix::WebSocketMessageType::Message) {
         if (msg->binary) {
-          ResponseData response;
-          response.data = msg->str;
-          response.brightness = brightness.load();
-          response.dwell_secs = -1;
+          ResponseData response = {msg->str, brightness.load(), -1};
           add_to_queue(std::move(response));
         } else {
           auto json_message = nlohmann::json::parse(msg->str, nullptr, false);
@@ -210,9 +204,16 @@ int main(int argc, char *argv[]) {
             return;
           }
 
+          //std::cout << "Received JSON message: " << json_message.dump() << std::endl;
+
           if (json_message.contains("brightness") &&
               json_message["brightness"].is_number_integer()) {
-            brightness.store(json_message["brightness"].get<int>());
+            int new_brightness = json_message["brightness"].get<int>();
+            if (new_brightness < 0 || new_brightness > 100) {
+              std::cerr << "Invalid brightness value: " << new_brightness << std::endl;
+              return;
+            }
+            brightness.store(new_brightness);
           } else if (json_message.contains("status") &&
                      json_message["status"].is_string() &&
                      json_message.contains("message") &&
@@ -273,7 +274,7 @@ int main(int argc, char *argv[]) {
 
         char *end_ptr = nullptr;
         response.brightness = std::strtol(brightness_str.c_str(), &end_ptr, 10);
-        if (*end_ptr != '\0') {
+        if (*end_ptr != '\0' || response.brightness < 0 || response.brightness > 100) {
           std::cerr << "Invalid brightness header value: " << brightness_str
                     << std::endl;
           response.brightness = 0;
