@@ -189,6 +189,7 @@ int main(int argc, char *argv[]) {
   std::thread fetch_thread;
   ix::WebSocket ws_client;
   if (use_websocket) {
+    int brightness = INITIAL_BRIGHTNESS;
     ws_client.setUrl(url);
     ws_client.enableAutomaticReconnection();
     ws_client.setOnMessageCallback([&](const ix::WebSocketMessagePtr &msg) {
@@ -199,7 +200,7 @@ int main(int argc, char *argv[]) {
         if (msg->binary) {
           ResponseData response;
           response.data = msg->str;
-          response.brightness = -1;
+          response.brightness = brightness;
           response.dwell_secs = -1;
           add_to_queue(std::move(response));
         } else {
@@ -214,11 +215,7 @@ int main(int argc, char *argv[]) {
 
           if (json_message.contains("brightness") &&
               json_message["brightness"].is_number_integer()) {
-            int brightness = json_message["brightness"].get<int>();
-
-            ResponseData response;
-            response.brightness = brightness;
-            add_to_queue(std::move(response));
+            brightness = json_message["brightness"].get<int>();
           } else if (json_message.contains("status") &&
                      json_message["status"].is_string() &&
                      json_message.contains("message") &&
@@ -322,8 +319,6 @@ int main(int argc, char *argv[]) {
     }
 
     if (response.data.empty()) {
-      // The websocket thread sends responses with empty data to set the
-      // brightness
       continue;
     }
 
