@@ -1,11 +1,23 @@
+# Run `make debug` to include -g for GDB
+# Run `make release` for optimized build (default)
 CXX ?= g++
 INCLUDES := -I/usr/local/include -I/opt/homebrew/include -Ilibs
 LIBPATHS := -L/usr/local/lib -L/opt/homebrew/lib
 LDFLAGS := $(LIBPATHS) -lwebp -lwebpdemux -lssl -lcrypto
 CFLAGS=-W -Wall -Wextra -Wno-unused-parameter -O3 -fPIC -march=native
-CXXFLAGS :=$(CFLAGS) -fno-exceptions -std=c++23
 TARGET := tronberry
 SRCS := main.cc startup.cc
+
+# Build modes
+all: release
+
+debug: CXXFLAGS = -O0 -g -Wall -Wextra -Wno-unused-parameter -fno-exceptions -std=c++23
+debug: $(TARGET)
+
+release: CXXFLAGS = -O3 -Wall -Wextra -Wno-unused-parameter -fno-exceptions -std=c++23
+release: $(TARGET)
+	strip $(TARGET)
+
 RGB_LIB_DISTRIBUTION=libs/rpi-rgb-led-matrix
 RGB_INCDIR=$(RGB_LIB_DISTRIBUTION)/include
 RGB_LIBDIR=$(RGB_LIB_DISTRIBUTION)/lib
@@ -33,7 +45,7 @@ $(RGB_LIBRARY): check-and-reinit-submodules
 OBJS := $(SRCS:.cc=.o)
 
 $(TARGET): $(OBJS) $(RGB_LIBRARY) $(IXWEBSOCKET_LIBRARY)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $(TARGET) $(OBJS) $(LDFLAGS) $(RGB_LDFLAGS) $(IXWEBSOCKET_LDFLAGS)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $(TARGET) $(OBJS) $(LDFLAGS) $(RGB_LDFLAGS) $(IXWEBSOCKET_LDFLAGS) -latomic
 
 clean: check-and-reinit-submodules
 	rm -f $(TARGET)

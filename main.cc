@@ -1,377 +1,447 @@
-#include <webp/decode.h>
-#include <webp/demux.h>
-
-#include <chrono>
+#define WEBP_EXTERN extern
 #include <iostream>
-#include <queue>
 #include <string>
 #include <thread>
-
+#include <fstream>
+#include <sstream>
+#include <chrono>
+#include <webp/demux.h>
+#include <webp/decode.h>
+#include <webp/mux.h>
 #include "httplib.h"
-#include "ixwebsocket/IXWebSocket.h"
-#include "json.hpp"
 #include "led-matrix.h"
+#include "graphics.h" // for rgb_matrix::DrawText, Color, Font
+#include <vector>
+#include <algorithm>  // for std::shuffle
+#include <random>     // for std::mt19937
+#include <cstdlib> // for rand()
 #include "startup.h"
+#include <cmath>
+#include <ctime>
 
 using namespace rgb_matrix;
+using namespace std::chrono_literals;
 
-static std::atomic<bool> running(true);
-static std::atomic<int> brightness(INITIAL_BRIGHTNESS);
-static std::condition_variable queue_not_full;
-static std::condition_variable queue_not_empty;
 
-static void InterruptHandler(int) {
-  running = false;
-  queue_not_empty.notify_all();
-  queue_not_full.notify_all();
-}
+enum class TransitionStyle {
+  OrbitDots,
+  Pulse,
+};
 
-static void DrawFrame(FrameCanvas *canvas, const uint8_t *frame_data, int width,
-                      int height) {
-  for (int y = 0; y < height; ++y) {
-    for (int x = 0; x < width; ++x) {
-      int index = (y * width + x) * 4;  // RGBA
-      canvas->SetPixel(x, y, frame_data[index], frame_data[index + 1],
-                       frame_data[index + 2]);
-    }
-  }
-}
+static int transition_index = 0;
 
-static void DisplayImage(RGBMatrix *matrix, FrameCanvas *&canvas,
-                         const uint8_t *image_data, int width, int height,
-                         int dwell_secs) {
-  DrawFrame(canvas, image_data, width, height);
+void ShowStartupSplash(rgb_matrix::RGBMatrix* matrix, rgb_matrix::FrameCanvas* canvas) {
+  WebPData webp_data;
+  webp_data.bytes = STARTUP_WEBP;
+  webp_data.size = STARTUP_WEBP_LEN;
 
-  canvas = matrix->SwapOnVSync(canvas);
-  if (!running) {
+  WebPAnimDecoderOptions dec_options;
+  WebPAnimDecoderOptionsInit(&dec_options);
+  WebPAnimDecoder* decoder = WebPAnimDecoderNew(&webp_data, &dec_options);
+  if (!decoder) {
+    std::cerr << "❌ Failed to create decoder for splash\n";
     return;
   }
-  if (dwell_secs > 0) {
-    std::this_thread::sleep_for(std::chrono::seconds(dwell_secs));
+
+  WebPAnimInfo anim_info;
+  if (!WebPAnimDecoderGetInfo(decoder, &anim_info)) {
+    std::cerr << "❌ Failed to get splash animation info\n";
+    WebPAnimDecoderDelete(decoder);
+    return;
   }
-}
 
-static void DisplayAnimation(
-    RGBMatrix *matrix, FrameCanvas *&canvas, WebPAnimDecoder *anim_decoder,
-    int width, int height, int dwell_secs,
-    const std::function<bool()> &stop_animation_callback) {
-  auto start_time = std::chrono::steady_clock::now();
-  uint8_t *frame_data;
-  int timestamp;
-  int prev_timestamp = 0;
+  uint8_t* frame;
+  int timestamp, last_timestamp = 0;
 
-  while (!dwell_secs || (std::chrono::steady_clock::now() - start_time <
-                         std::chrono::seconds(dwell_secs))) {
-    if (stop_animation_callback()) {
-      break;
+  while (WebPAnimDecoderHasMoreFrames(decoder)) {
+    if (!WebPAnimDecoderGetNext(decoder, &frame, &timestamp)) break;
+
+    for (uint32_t y = 0; y < anim_info.canvas_height && y < (uint32_t)canvas->height(); ++y) {
+      for (uint32_t x = 0; x < anim_info.canvas_width && x < (uint32_t)canvas->width(); ++x) {
+        int idx = (y * anim_info.canvas_width + x) * 4;
+        canvas->SetPixel(x, y, frame[idx], frame[idx + 1], frame[idx + 2]);
+      }
     }
-
-    if (!WebPAnimDecoderGetNext(anim_decoder, &frame_data, &timestamp)) {
-      WebPAnimDecoderReset(anim_decoder);
-      prev_timestamp = 0;
-      continue;
-    }
-
-    DrawFrame(canvas, frame_data, width, height);
 
     canvas = matrix->SwapOnVSync(canvas);
-
-    if (!running) {
-      break;
-    }
-
-    int delay_ms = timestamp - prev_timestamp;
-    if (delay_ms > 0) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
-    }
-    prev_timestamp = timestamp;
-
-    if (!running) {
-      break;
-    }
+    int delay = timestamp - last_timestamp;
+    std::this_thread::sleep_for(std::chrono::milliseconds(delay > 10 ? delay : 10));
+    last_timestamp = timestamp;
   }
+
+  WebPAnimDecoderDelete(decoder);
 }
 
-static int usage(const char *progname, const char *msg = NULL) {
-  if (msg) {
-    std::cerr << msg << std::endl;
-  }
-  std::cerr << "Fetch images over HTTP and display on RGB-Matrix" << std::endl;
-  std::cerr << "usage: " << progname << " <URL>" << std::endl;
+void HSVtoRGB(float h, float s, float v, uint8_t& r, uint8_t& g, uint8_t& b) {
+  float c = v * s;
+  float x = c * (1 - fabs(fmod(h / 60.0, 2) - 1));
+  float m = v - c;
+  float r1, g1, b1;
 
-  std::cerr << "\nGeneral LED matrix options:" << std::endl;
-  PrintMatrixFlags(stderr);
-  return 1;
+  if (h < 60)      { r1 = c; g1 = x; b1 = 0; }
+  else if (h < 120){ r1 = x; g1 = c; b1 = 0; }
+  else if (h < 180){ r1 = 0; g1 = c; b1 = x; }
+  else if (h < 240){ r1 = 0; g1 = x; b1 = c; }
+  else if (h < 300){ r1 = x; g1 = 0; b1 = c; }
+  else             { r1 = c; g1 = 0; b1 = x; }
+
+  r = static_cast<uint8_t>((r1 + m) * 255);
+  g = static_cast<uint8_t>((g1 + m) * 255);
+  b = static_cast<uint8_t>((b1 + m) * 255);
 }
 
-int main(int argc, char *argv[]) {
-  RGBMatrix::Options matrix_options;
-  matrix_options.rows = 32;
-  matrix_options.cols = 64;
-  matrix_options.chain_length = 1;
-  matrix_options.parallel = 1;
-  matrix_options.brightness = INITIAL_BRIGHTNESS;
-  matrix_options.hardware_mapping = "regular";
+void TransitionOrbitDots(rgb_matrix::RGBMatrix* matrix, rgb_matrix::FrameCanvas* canvas) {
+  const int centerX = canvas->width() / 2;
+  const int centerY = canvas->height() / 2;
+  const int radius = std::min(centerX, centerY) - 1;
+  const int dot_count = 4;
+  const int cycles = 3;
+  const int frames_per_cycle = 72;
 
-  RuntimeOptions runtime_options;
-  runtime_options.gpio_slowdown = 2;
-  runtime_options.drop_privileges = true;
+  std::vector<float> angles(dot_count);   // current angle for each dot
+  std::vector<float> delays(dot_count);   // offset timing for staggered takeoff
 
-  if (!ParseOptionsFromFlags(&argc, &argv, &matrix_options, &runtime_options)) {
-    return usage(argv[0]);
+  for (int i = 0; i < dot_count; ++i) {
+    angles[i] = (float)i / dot_count * 2.0f * M_PI;
+    delays[i] = (float)i * 0.2f;  // staggered start
   }
 
-  if (argc != 2) {
-    usage(argv[0], "Invalid number of arguments");
-    return 1;
-  }
+  float base_hue = static_cast<float>(std::rand() % 360);
 
-  bool use_websocket = false;
-  std::string url = argv[1];
-  size_t scheme_end = url.find("://");
-  if (scheme_end == std::string::npos) {
-    std::cerr
-        << "Invalid URL: Missing scheme (http://, https://, ws://, or wss://)"
-        << std::endl;
-    return 1;
-  }
+  for (int cycle = 0; cycle < cycles; ++cycle) {
+    for (int frame = 0; frame < frames_per_cycle; ++frame) {
+      float progress = (float)frame / frames_per_cycle;
+      float easing = std::cos(progress * M_PI);  // slows them near middle
+      float base_speed = (1.0f - easing) * 0.15f + 0.015f;
 
-  std::string scheme = url.substr(0, scheme_end);
-  if (scheme == "ws" || scheme == "wss") {
-    use_websocket = true;
-  } else if (scheme != "http" && scheme != "https") {
-    std::cerr << "Invalid URL: Unsupported scheme (" << scheme << ")"
-              << std::endl;
-    return 1;
-  }
+      canvas->Clear();
 
-  RGBMatrix *matrix = CreateMatrixFromOptions(matrix_options, runtime_options);
-  if (!matrix) {
-    std::cerr << "Failed to initialize RGB matrix" << std::endl;
-    return 1;
-  }
+      for (int i = 0; i < dot_count; ++i) {
+        float angle_offset = (progress - delays[i]);
+        if (angle_offset < 0) angle_offset = 0;
 
-  FrameCanvas *offscreen_canvas = matrix->CreateFrameCanvas();
+        float speed = base_speed * (1.0f + (float)i * 0.05f);
+        angles[i] += speed;
 
-  signal(SIGTERM, InterruptHandler);
-  signal(SIGINT, InterruptHandler);
+        float hue = fmod(base_hue + frame * 2 + i * 30, 360.0f);
+        uint8_t r, g, b;
+        HSVtoRGB(hue, 1.0f, 1.0f, r, g, b);
 
-  std::mutex queue_mutex;
-  struct ResponseData {
-    std::string data;
-    int brightness;
-    int dwell_secs;
-  };
-  std::queue<ResponseData> response_queue;
-  const size_t max_queue_size = 1;
+        int x = static_cast<int>(centerX + std::cos(angles[i]) * radius);
+        int y = static_cast<int>(centerY + std::sin(angles[i]) * radius);
 
-  // Display the startup image
-  ResponseData startup_response = {
-      std::string(reinterpret_cast<const char *>(STARTUP_WEBP),
-                  STARTUP_WEBP_LEN),
-      INITIAL_BRIGHTNESS, use_websocket ? 0 : INITIAL_DWELL_SECS};
-  response_queue.push(std::move(startup_response));
-
-  auto add_to_queue = [&](ResponseData response) {
-    std::unique_lock<std::mutex> lock(queue_mutex);
-    queue_not_full.wait(lock, [&]() {
-      return response_queue.size() < max_queue_size || !running;
-    });
-    if (!running) {
-      return;
-    }
-    response_queue.push(std::move(response));
-    queue_not_empty.notify_one();
-  };
-
-  std::thread fetch_thread;
-  ix::WebSocket ws_client;
-  if (use_websocket) {
-    ws_client.setUrl(url);
-    ws_client.enableAutomaticReconnection();
-    ws_client.setOnMessageCallback([&](const ix::WebSocketMessagePtr &msg) {
-      if (!running) {
-        return;
-      }
-      if (msg->type == ix::WebSocketMessageType::Message) {
-        if (msg->binary) {
-          ResponseData response = {msg->str, brightness.load(), -1};
-          add_to_queue(std::move(response));
-        } else {
-          auto json_message = nlohmann::json::parse(msg->str, nullptr, false);
-          if (json_message.is_discarded()) {
-            std::cerr << "JSON parsing error: Invalid JSON format" << std::endl;
-            return;
-          }
-
-          //std::cout << "Received JSON message: " << json_message.dump() << std::endl;
-
-          if (json_message.contains("brightness") &&
-              json_message["brightness"].is_number_integer()) {
-            int new_brightness = json_message["brightness"].get<int>();
-            if (new_brightness < 0 || new_brightness > 100) {
-              std::cerr << "Invalid brightness value: " << new_brightness << std::endl;
-              return;
+        // Draw a 3x3 "dot" centered on (x, y)
+        for (int dy = -1; dy <= 1; ++dy) {
+          for (int dx = -1; dx <= 1; ++dx) {
+            int px = x + dx;
+            int py = y + dy;
+            if (px >= 0 && px < canvas->width() && py >= 0 && py < canvas->height()) {
+              float falloff = 1.0f - 0.25f * (abs(dx) + abs(dy));  // simple brightness gradient
+              uint8_t rr = static_cast<uint8_t>(r * falloff);
+              uint8_t gg = static_cast<uint8_t>(g * falloff);
+              uint8_t bb = static_cast<uint8_t>(b * falloff);
+              canvas->SetPixel(px, py, rr, gg, bb);
             }
-            brightness.store(new_brightness);
-          } else if (json_message.contains("status") &&
-                     json_message["status"].is_string() &&
-                     json_message.contains("message") &&
-                     json_message["message"].is_string()) {
-            std::cerr << json_message["status"].get<std::string>() << ": "
-                      << json_message["message"].get<std::string>()
-                      << std::endl;
-          } else {
-            std::cerr << "Invalid JSON message format" << std::endl;
           }
         }
-      } else if (msg->type == ix::WebSocketMessageType::Error) {
-        std::cerr << "WebSocket error: " << msg->errorInfo.reason << std::endl;
-      } else if (msg->type == ix::WebSocketMessageType::Close) {
-        std::cerr << "WebSocket closed: " << msg->closeInfo.reason << std::endl;
       }
-    });
-    ws_client.start();
-  } else {
-    size_t path_start = url.find(
-        '/', scheme_end + 3);  // Find the start of the path after the scheme
-    httplib::Client client(
-        url.substr(0, path_start != std::string::npos
-                          ? path_start
-                          : url.length()));  // Extract base URL
-    if (client.is_valid() == false) {
-      std::cerr << "Invalid URL: Unable to create client" << std::endl;
-      return 1;
+
+      canvas = matrix->SwapOnVSync(canvas);
+      std::this_thread::sleep_for(std::chrono::milliseconds(22));  // ~45fps
     }
-    client.set_default_headers(
-        {{"User-Agent", "Tronberry/1.0"},
-         {"Accept", "image/webp, image/*;q=0.8, */*;q=0.5"}});
-    std::string path = path_start != std::string::npos
-                           ? url.substr(path_start)
-                           : "/";  // Extract path or default to "/"
+  }
+}
 
-    fetch_thread = std::thread([&]() {
-      int retry_count = 0;
-      while (running) {
-        auto res = client.Get(path.c_str());
-        if (!res || res->status != 200) {
-          std::cerr << "Failed to fetch image from URL: " << url << std::endl;
-          int wait_time = std::min(
-              1 << retry_count,
-              60);  // Exponential backoff with max wait time of 60 seconds
-          wait_time =
-              std::max(wait_time, 1);  // Ensure at least 1 second wait time
-          std::this_thread::sleep_for(std::chrono::seconds(wait_time));
-          retry_count++;
-          continue;
+void TransitionPulse(rgb_matrix::RGBMatrix* matrix, rgb_matrix::FrameCanvas* canvas, int, int, int) {
+  const int centerX = canvas->width() / 2;
+  const int centerY = canvas->height() / 2;
+  const int max_radius = std::max(centerX, centerY);
+  const int fade_width = 6;
+  const int pulse_count = 4;
+  const int frames_per_pulse = 24;
+  const int total_frames = pulse_count * frames_per_pulse;
+
+  std::srand(std::time(nullptr));
+  float base_hue = std::rand() % 360;
+
+  for (int frame = 0; frame < total_frames; ++frame) {
+    float pulse_progress = (float)(frame % frames_per_pulse) / (frames_per_pulse - 1);
+    float eased = std::sin(pulse_progress * M_PI);
+    int radius = static_cast<int>(eased * max_radius);
+
+    for (int y = 0; y < canvas->height(); ++y) {
+      for (int x = 0; x < canvas->width(); ++x) {
+        int dx = x - centerX;
+        int dy = y - centerY;
+        int dist = std::sqrt(dx * dx + dy * dy);
+
+        if (dist <= radius && dist >= radius - fade_width) {
+          float alpha = 1.0f - (float)(radius - dist) / fade_width;
+
+          // Use distance or angle to influence hue
+          float angle = std::atan2(dy, dx);  // -π to π
+          float hue_offset = (angle + M_PI) / (2 * M_PI); // 0 to 1
+          float hue = fmod(base_hue + hue_offset * 60, 360.0f); // subtle gradient
+
+          uint8_t rr, gg, bb;
+          HSVtoRGB(hue, 1.0f, alpha, rr, gg, bb);
+          canvas->SetPixel(x, y, rr, gg, bb);
+        } else {
+          canvas->SetPixel(x, y, 0, 0, 0);
         }
-        retry_count = 0;  // Reset retry_count on success
-
-        ResponseData response;
-        response.data = std::move(res->body);
-        auto brightness_str = res->get_header_value("Tronbyt-Brightness", "0");
-        auto dwell_secs_str = res->get_header_value("Tronbyt-Dwell-Secs", "0");
-
-        char *end_ptr = nullptr;
-        response.brightness = std::strtol(brightness_str.c_str(), &end_ptr, 10);
-        if (*end_ptr != '\0' || response.brightness < 0 || response.brightness > 100) {
-          std::cerr << "Invalid brightness header value: " << brightness_str
-                    << std::endl;
-          response.brightness = 0;
-        }
-
-        end_ptr = nullptr;
-        response.dwell_secs = std::strtol(dwell_secs_str.c_str(), &end_ptr, 10);
-        if (*end_ptr != '\0') {
-          std::cerr << "Invalid dwell_secs header value: " << dwell_secs_str
-                    << std::endl;
-          response.dwell_secs = 0;
-        }
-
-        add_to_queue(std::move(response));
       }
-    });
+    }
+
+    canvas = matrix->SwapOnVSync(canvas);
+    std::this_thread::sleep_for(std::chrono::milliseconds(16));
+  }
+}
+
+void RunTransition(rgb_matrix::RGBMatrix* matrix, rgb_matrix::FrameCanvas* canvas) {
+  int style = transition_index % 2;
+  transition_index++;
+  std::cout << "Transition index = " << transition_index << " | style = " << style << std::endl;
+  std::cout << "Transition enum: " << static_cast<int>(static_cast<TransitionStyle>(style)) << std::endl;
+
+  switch (static_cast<TransitionStyle>(style)) {
+    case TransitionStyle::OrbitDots:
+      std::cout << "<< Entering OrbitDots transition\n";
+      TransitionOrbitDots(matrix, canvas);
+      std::cout << "<< Exiting OrbitDots transition\n";
+      break;
+    case TransitionStyle::Pulse:
+      std::cout << ">> Entering Pulse transition\n";
+      TransitionPulse(matrix, canvas, 64, 64, 64);
+      std::cout << "<< Exiting Pulse transition\n";
+      break;
+    }
   }
 
-  while (running) {
-    ResponseData response;
-    {
-      std::unique_lock<std::mutex> lock(queue_mutex);
-      queue_not_empty.wait(
-          lock, [&]() { return !response_queue.empty() || !running; });
-      if (!running) {
-        break;
-      }
 
-      response = std::move(response_queue.front());
-      response_queue.pop();
-    }
-    queue_not_full.notify_one();
+void RunFetchLoop(rgb_matrix::RGBMatrix* matrix, const std::string& host, const std::string& path) {
 
-    static int previous_brightness = -1;
-    if (response.brightness != -1 &&
-        response.brightness != previous_brightness) {
-      std::cout << "Setting brightness to " << response.brightness << std::endl;
-      matrix->SetBrightness(response.brightness);
-      previous_brightness = response.brightness;
-    }
+  WebPAnimDecoder* decoder = nullptr;
+  (void)decoder;
+  std::vector<uint8_t> prev_frame, current_frame;
 
-    if (response.data.empty()) {
+  rgb_matrix::FrameCanvas* canvas = matrix->CreateFrameCanvas();
+
+  httplib::Client client(host.c_str());
+  if (!client.is_valid()) {
+    std::cerr << "Invalid client for: " << host << std::endl;
+    return;
+  }
+
+  while (true) {
+    int brightness = 100;  // Default brightness
+    int dwell_secs = 10;   // Default dwell time in seconds
+
+    std::string last_hash;
+    // RunTransition(matrix, canvas);
+    auto res = client.Get(path.c_str());
+    if (!res || res->status != 200) {
+      std::cerr << "Failed to fetch from: " << host << path << std::endl;
+      std::this_thread::sleep_for(1s);
       continue;
     }
 
-    WebPData webp_data = {
-        reinterpret_cast<const uint8_t *>(response.data.data()),
-        response.data.size()};
-    WebPAnimDecoderOptions anim_options;
-    WebPAnimDecoderOptionsInit(&anim_options);
-    WebPAnimDecoder *anim_decoder =
-        WebPAnimDecoderNew(&webp_data, &anim_options);
+    // Extract tronbyt-brightness and tronbyt-dwell-secs headers
+    std::string brightness_header = res->get_header_value("tronbyt-brightness");
+    std::string dwell_header = res->get_header_value("tronbyt-dwell-secs");
 
-    if (anim_decoder) {
-      WebPAnimInfo anim_info;
-      WebPAnimDecoderGetInfo(anim_decoder, &anim_info);
-
-      if (anim_info.frame_count > 1) {
-        auto stop_animation_callback = [&]() {
-          std::unique_lock<std::mutex> lock(queue_mutex);
-          return !response_queue.empty() || !running;
-        };
-
-        DisplayAnimation(matrix, offscreen_canvas, anim_decoder,
-                         anim_info.canvas_width, anim_info.canvas_height,
-                         response.dwell_secs, stop_animation_callback);
-      } else {
-        uint8_t *frame_data;
-        int timestamp;
-        WebPAnimDecoderGetNext(anim_decoder, &frame_data, &timestamp);
-        DisplayImage(matrix, offscreen_canvas, frame_data,
-                     anim_info.canvas_width, anim_info.canvas_height,
-                     response.dwell_secs);
-      }
-
-      WebPAnimDecoderDelete(anim_decoder);
+    if (!brightness_header.empty()) {
+      
+    std::istringstream brightness_stream(brightness_header);
+    if (!(brightness_stream >> brightness)) {
+      std::cerr << "Invalid brightness header: " << brightness_header << std::endl;
     } else {
-      int width, height;
-      uint8_t *image_data =
-          WebPDecodeRGBA(webp_data.bytes, webp_data.size, &width, &height);
-      if (image_data) {
-        DisplayImage(matrix, offscreen_canvas, image_data, width, height,
-                     response.dwell_secs);
-        WebPFree(image_data);
+      if (brightness < 1) brightness = 1;
+      if (brightness > 100) brightness = 100;
+      matrix->SetBrightness(brightness);
+    }
+    
+    }
+
+    if (!dwell_header.empty()) {
+      
+      std::istringstream dwell_stream(dwell_header);
+      if (!(dwell_stream >> dwell_secs)) {
+        std::cerr << "Invalid dwell header: " << dwell_header << std::endl;
       } else {
-        std::cerr << "Failed to decode WebP image" << std::endl;
+      if (dwell_secs < 1) dwell_secs = 1;
       }
+    
+    }
+
+    std::string current_hash = std::to_string(std::hash<std::string>{}(res->body));
+    RunTransition(matrix, canvas);
+    std::cout << "✅ Transition complete, preparing to decode WebP\n";
+    if (current_hash == last_hash) {
+      std::this_thread::sleep_for(500ms);
+      continue;
+    }
+    last_hash = current_hash;
+    if (!res || res->status != 200) {
+      std::cerr << "Failed to fetch from: " << host << path << std::endl;
+      std::this_thread::sleep_for(1s);
+      continue;
+    }
+
+WebPDemuxer* demux = nullptr;
+WebPAnimDecoder* decoder = nullptr;
+int last_timestamp = 0;
+int delay = 0;
+auto start_time = std::chrono::steady_clock::now();
+
+// Load WebP data
+WebPData webp_data;
+webp_data.bytes = reinterpret_cast<const uint8_t*>(res->body.c_str());
+webp_data.size = res->body.size();
+
+demux = WebPDemux(&webp_data);
+if (!demux) {
+  std::cerr << "❌ demux creation failed — skipping decode.\n";
+  goto cleanup;
+}
+
+WebPAnimInfo anim_info;
+anim_info.frame_count = WebPDemuxGetI(demux, WEBP_FF_FRAME_COUNT);
+anim_info.loop_count = WebPDemuxGetI(demux, WEBP_FF_LOOP_COUNT);
+anim_info.canvas_width = WebPDemuxGetI(demux, WEBP_FF_CANVAS_WIDTH);
+anim_info.canvas_height = WebPDemuxGetI(demux, WEBP_FF_CANVAS_HEIGHT);
+
+if (anim_info.frame_count == 1) {
+  int width = 0, height = 0;
+  uint8_t* rgb = WebPDecodeRGB(webp_data.bytes, webp_data.size, &width, &height);
+  if (!rgb) {
+    std::cerr << "❌ Failed to decode static WebP image\n";
+    goto cleanup;
+  }
+
+  for (uint32_t y = 0; y < anim_info.canvas_height && y < (uint32_t)canvas->height(); ++y) {
+    for (uint32_t x = 0; x < anim_info.canvas_width && x < (uint32_t)canvas->width(); ++x) {
+      int idx = (y * width + x) * 3;
+      canvas->SetPixel(x, y, rgb[idx], rgb[idx + 1], rgb[idx + 2]);
     }
   }
 
-  std::cout << "Shutting down..." << std::endl;
-  if (use_websocket) {
-    ws_client.stop();
-  } else {
-    fetch_thread.join();
+  canvas = matrix->SwapOnVSync(canvas);
+  free(rgb);
+  std::this_thread::sleep_for(std::chrono::seconds(dwell_secs));
+  goto cleanup;
+}
+
+
+// Animated WebP
+WebPAnimDecoderOptions dec_options;
+WebPAnimDecoderOptionsInit(&dec_options);
+decoder = WebPAnimDecoderNew(&webp_data, &dec_options);
+if (!decoder) {
+  std::cerr << "❌ Failed to create WebPAnimDecoder\n";
+  goto cleanup;
+}
+
+if (!WebPAnimDecoderGetInfo(decoder, &anim_info)) {
+  std::cerr << "❌ Failed to get animation info from decoder\n";
+  goto cleanup;
+}
+
+uint8_t* frame;
+int timestamp;
+last_timestamp = 0;
+
+
+
+while (true) {
+  WebPAnimDecoderReset(decoder);  // Restart animation from beginning
+  last_timestamp = 0;
+
+  while (WebPAnimDecoderHasMoreFrames(decoder)) {
+    if (!WebPAnimDecoderGetNext(decoder, &frame, &timestamp)) {
+      std::cerr << "⚠️ Failed to get next frame\n";
+      break;
+    }
+
+    for (uint32_t y = 0; y < anim_info.canvas_height && y < (uint32_t)canvas->height(); ++y) {
+      for (uint32_t x = 0; x < anim_info.canvas_width && x < (uint32_t)canvas->width(); ++x) {
+        int idx = (y * anim_info.canvas_width + x) * 4;
+        canvas->SetPixel(x, y, frame[idx], frame[idx + 1], frame[idx + 2]);
+      }
+    }
+
+    canvas = matrix->SwapOnVSync(canvas);
+    delay = timestamp - last_timestamp;
+    if (delay < 10) delay = 10;
+    std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+    last_timestamp = timestamp;
   }
 
-  delete matrix;
+  auto now = std::chrono::steady_clock::now();
+  auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start_time).count();
+  if (elapsed >= dwell_secs) {
+    break;
+  }
+}
+
+cleanup:
+  if (decoder != nullptr) {
+    WebPAnimDecoderDelete(decoder);
+    decoder = nullptr;
+  }
+  if (demux != nullptr) {
+    WebPDemuxDelete(demux);
+    demux = nullptr;
+  }
+  continue;
+  }
+}
+int main(int argc, char *argv[]) {
+  if (argc < 2) {
+    std::cerr << "Usage: tronberry <URL>" << std::endl;
+    return 1;
+  }
+
+  RGBMatrix::Options options;
+  RuntimeOptions runtime_opt;
+  options.hardware_mapping = "adafruit-hat";
+  options.rows = 32;
+  options.cols = 64;
+  options.chain_length = 1;
+  options.parallel = 1;
+  options.show_refresh_rate = false;
+
+  rgb_matrix::RGBMatrix* matrix = rgb_matrix::CreateMatrixFromFlags(&argc, &argv, &options, &runtime_opt);
+  FrameCanvas* canvas = matrix->CreateFrameCanvas();
+  if (matrix == nullptr) {
+    std::cerr << "Failed to initialize matrix" << std::endl;
+    return 1;
+  }
+
+  std::ifstream config("tronberry.conf");
+  std::string full_url;
+  if (!config.is_open()) {
+    std::cerr << "Could not open tronberry.conf" << std::endl;
+    return 1;
+  }
+  std::string line;
+  while (std::getline(config, line)) {
+    if (line.rfind("URL=", 0) == 0) {
+      full_url = line.substr(4);
+      break;
+    }
+  }
+  if (full_url.empty()) {
+    std::cerr << "No URL= entry found in config" << std::endl;
+    return 1;
+  }
+  auto pos = full_url.find("/", full_url.find("//") + 2);
+  if (pos == std::string::npos) {
+    std::cerr << "Invalid URL: " << full_url << std::endl;
+    return 1;
+  }
+  std::string host = full_url.substr(0, pos);
+  std::string path = full_url.substr(pos);
+  ShowStartupSplash(matrix, canvas);
+  RunFetchLoop(matrix, host, path);
   return 0;
 }
