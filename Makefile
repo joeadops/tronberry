@@ -40,7 +40,7 @@ $(IXWEBSOCKET_LIBRARY): check-and-reinit-submodules $(IXWEBSOCKET_OBJS)
 	$(AR) rcs $@ $(filter-out check-and-reinit-submodules,$^)
 
 $(RGB_LIBRARY): check-and-reinit-submodules
-	$(MAKE) -C $(RGB_LIBDIR) CFLAGS="$(CFLAGS) -DDEFAULT_HARDWARE='\"regular\"'"
+	$(MAKE) -C $(RGB_LIBDIR) CFLAGS="$(CFLAGS) -DDEFAULT_HARDWARE='\"$(HARDWARE)\"'"
 
 OBJS := $(SRCS:.cc=.o)
 
