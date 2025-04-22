@@ -3,6 +3,7 @@
 A daemon to fetch images from a Tronbyt server and display them on an LED matrix connected to a Raspberry Pi.
 
 Tested with a Raspberry Pi 4, but it should work on any Pi model supported by [hzeller/rpi-rgb-led-matrix](https://github.com/hzeller/rpi-rgb-led-matrix).
+The version from the Tronbyt repo did not want to work well for me at all, so I forked that repo to do some code refactoring and compatibility improvements.  Then I created transitions between tronbyt apps.  There are 2 transitions, currently. They just rotate.
 
 ---
 
