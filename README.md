@@ -2,7 +2,7 @@
 
 A daemon to fetch images from a Tronbyt server and display them on an LED matrix connected to a Raspberry Pi.
 
-Tested with a Raspberry Pi Zero 2W, but it should work on any Pi model supported by [hzeller/rpi-rgb-led-matrix](https://github.com/hzeller/rpi-rgb-led-matrix).
+Tested with a Raspberry Pi 4, but it should work on any Pi model supported by [hzeller/rpi-rgb-led-matrix](https://github.com/hzeller/rpi-rgb-led-matrix).
 
 ---
 
