@@ -19,7 +19,41 @@
 #include <cmath>
 #include <ctime>
 
+
+inline uint8_t ApplyGamma(uint8_t color, float gamma = 2.2f) {
+    return static_cast<uint8_t>(pow(color / 255.0f, gamma) * 255.0f);
+}
+
+
 using namespace rgb_matrix;
+
+
+inline void ProcessPixel(uint8_t in_r, uint8_t in_g, uint8_t in_b, uint8_t alpha,
+                         uint8_t& out_r, uint8_t& out_g, uint8_t& out_b,
+                         float gamma = 2.2f, float min_floor = 0.07f,
+                         float brightness_scale = 1.0f) {
+    if ((in_r + in_g + in_b < 20) || alpha < 20) {
+        out_r = out_g = out_b = 0;
+        return;
+    }
+
+    float a = alpha / 255.0f;
+    float rf = pow((in_r * a) / 255.0f, gamma);
+    float gf = pow((in_g * a) / 255.0f, gamma);
+    float bf = pow((in_b * a) / 255.0f, gamma);
+
+    float maxc = std::max({ rf, gf, bf });
+    float scale = (maxc < min_floor) ? (min_floor / maxc) : 1.0f;
+
+    rf = std::min(1.0f, rf * scale * brightness_scale);
+    gf = std::min(1.0f, gf * scale * brightness_scale);
+    bf = std::min(1.0f, bf * scale * brightness_scale);
+
+    out_r = static_cast<uint8_t>(rf * 255.0f);
+    out_g = static_cast<uint8_t>(gf * 255.0f);
+    out_b = static_cast<uint8_t>(bf * 255.0f);
+}
+
 using namespace std::chrono_literals;
 
 
@@ -59,7 +93,16 @@ void ShowStartupSplash(rgb_matrix::RGBMatrix* matrix, rgb_matrix::FrameCanvas* c
     for (uint32_t y = 0; y < anim_info.canvas_height && y < (uint32_t)canvas->height(); ++y) {
       for (uint32_t x = 0; x < anim_info.canvas_width && x < (uint32_t)canvas->width(); ++x) {
         int idx = (y * anim_info.canvas_width + x) * 4;
-        canvas->SetPixel(x, y, frame[idx], frame[idx + 1], frame[idx + 2]);
+        
+        uint8_t alpha = frame[idx + 3];
+        float alpha_f = alpha / 255.0f;
+
+        uint8_t r = ApplyGamma(static_cast<uint8_t>(frame[idx] * alpha_f));
+        uint8_t g = ApplyGamma(static_cast<uint8_t>(frame[idx + 1] * alpha_f));
+        uint8_t b = ApplyGamma(static_cast<uint8_t>(frame[idx + 2] * alpha_f));
+
+        canvas->SetPixel(x, y, r, g, b);
+
       }
     }
 
@@ -256,7 +299,7 @@ void RunFetchLoop(rgb_matrix::RGBMatrix* matrix, const std::string& host, const 
       std::cerr << "Invalid brightness header: " << brightness_header << std::endl;
     } else {
       if (brightness < 1) brightness = 1;
-      if (brightness > 100) brightness = 100;
+  if (brightness > 50) brightness = 50;
       matrix->SetBrightness(brightness);
     }
     
@@ -365,7 +408,16 @@ while (true) {
     for (uint32_t y = 0; y < anim_info.canvas_height && y < (uint32_t)canvas->height(); ++y) {
       for (uint32_t x = 0; x < anim_info.canvas_width && x < (uint32_t)canvas->width(); ++x) {
         int idx = (y * anim_info.canvas_width + x) * 4;
-        canvas->SetPixel(x, y, frame[idx], frame[idx + 1], frame[idx + 2]);
+        
+        uint8_t alpha = frame[idx + 3];
+        float alpha_f = alpha / 255.0f;
+
+        uint8_t r = ApplyGamma(static_cast<uint8_t>(frame[idx] * alpha_f));
+        uint8_t g = ApplyGamma(static_cast<uint8_t>(frame[idx + 1] * alpha_f));
+        uint8_t b = ApplyGamma(static_cast<uint8_t>(frame[idx + 2] * alpha_f));
+
+        canvas->SetPixel(x, y, r, g, b);
+
       }
     }
 
