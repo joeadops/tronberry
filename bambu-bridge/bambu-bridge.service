@@ -1,0 +1,15 @@
+[Unit]
+Description=Bambu printer status bridge for Tronbyt
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=pi
+WorkingDirectory=/home/pi/bambu-bridge
+EnvironmentFile=/home/pi/bambu-bridge/.env
+ExecStart=/usr/bin/python3 /home/pi/bambu-bridge/bambu_bridge.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
