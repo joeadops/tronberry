@@ -2,14 +2,29 @@
 
 A daemon to fetch images from a Tronbyt server and display on a matrix LED display connected to a Raspberry Pi.
 
-It has only been tested with a Raspberry Pi Zero 2W, but should work with all devices supported by https://github.com/hzeller/rpi-rgb-led-matrix.
+It has been tested with a Raspberry Pi Zero 2W and a Raspberry Pi 4 / CM4, and should work with all devices supported by https://github.com/hzeller/rpi-rgb-led-matrix.
+
+## About this fork
+
+This fork tracks [tronbyt/tronberry](https://github.com/tronbyt/tronberry) and adds animated transitions between apps:
+
+- **Orbit dots**: four rainbow dots orbit the center of the panel.
+- **Pulse**: rainbow rings expand and contract from the center.
+
+By default the two alternate. Choose one, or turn them off, with `--transition=alternate|orbit|pulse|none`.
+
+The installer defaults to a 64x32 panel on an Adafruit RGB Matrix HAT (`--led-gpio-mapping=adafruit-hat --led-slowdown-gpio=4`). A Pi 4 or CM4 drives the GPIO pins too fast for most panels at lower slowdown values, which shows up as sparkly static around lit pixels.
+
+### Running the server on the same Pi
+
+The [Tronbyt server](https://github.com/tronbyt/server) can run on the same Pi as the display. A Pi 4 handles both easily. Download the `tronbyt-server-linux-arm64` binary from its releases, run it as a systemd service, and point tronberry at `ws://localhost:8000/<device-id>/ws`.
 
 ## Installation
 
 Run the installation script and follow the instructions. The script will ask whether you want to apply optimizations to prevent LED matrix flickering. Note that this will disable audio and Bluetooth and requires a reboot.
 
 ```sh
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/tronbyt/tronberry/HEAD/install.sh)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/joeadops/tronberry/HEAD/install.sh)"
 ```
 
 ## Configuration
@@ -23,7 +38,7 @@ If you missed this during the initial installation, you can either run the insta
 To upgrade to a new version, just run the install script again:
 
 ```sh
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/tronbyt/tronberry/HEAD/install.sh)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/joeadops/tronberry/HEAD/install.sh)"
 ```
 
 ## Building instructions
@@ -36,7 +51,7 @@ sudo apt-get update
 sudo apt-get -y install git libwebp-dev libssl-dev zlib1g-dev
 
 # Clone repository
-git clone --recurse-submodules https://github.com/tronbyt/tronberry.git
+git clone --recurse-submodules https://github.com/joeadops/tronberry.git
 
 # Build
 cd tronberry

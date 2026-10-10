@@ -22,6 +22,7 @@
 #include "json.h"
 #include "led-matrix.h"
 #include "startup.h"
+#include "transitions.h"
 
 #ifndef FIRMWARE_VERSION
 #define FIRMWARE_VERSION "dev"
@@ -41,6 +42,7 @@ struct AppState {
   std::atomic<int> brightness{INITIAL_BRIGHTNESS};
   std::atomic<bool> redraw_frame{false};
   bool verbose = false;
+  TransitionMode transition_mode = TransitionMode::Alternate;
   std::condition_variable queue_not_full;
   std::condition_variable queue_not_empty;
 };
@@ -277,7 +279,11 @@ static int usage(const char *progname, const char *msg = NULL) {
     std::cerr << msg << std::endl;
   }
   std::cerr << "Fetch images over HTTP and display on RGB-Matrix" << std::endl;
-  std::cerr << "usage: " << progname << " <URL>" << std::endl;
+  std::cerr << "usage: " << progname << " [--verbose] [--transition=MODE] <URL>"
+            << std::endl;
+  std::cerr << "\n  --transition=MODE  Animation between apps: alternate "
+               "(default), orbit, pulse or none"
+            << std::endl;
 
   std::cerr << "\nGeneral LED matrix options:" << std::endl;
   PrintMatrixFlags(stderr);
@@ -304,6 +310,13 @@ int main(int argc, char *argv[]) {
   for (auto it = new_argv.begin() + 1; it != new_argv.end();) {
     if (strcmp(*it, "--verbose") == 0) {
       state.verbose = true;
+      it = new_argv.erase(it);
+    } else if (strncmp(*it, "--transition=", 13) == 0) {
+      auto mode = ParseTransitionMode(*it + 13);
+      if (!mode) {
+        return usage(argv[0], "Invalid --transition value");
+      }
+      state.transition_mode = *mode;
       it = new_argv.erase(it);
     } else {
       ++it;
@@ -620,6 +633,15 @@ int main(int argc, char *argv[]) {
         WebPAnimDecoderNew(&webp_data, &anim_options), anim_deleter);
 
     const int immediate_requests_at_start = immediate_requests.load();
+
+    if (!startup_animation_playing.load() &&
+        state.transition_mode != TransitionMode::None &&
+        state.brightness.load() > 0) {
+      RunTransition(state.transition_mode, matrix.get(), offscreen_canvas, [&]() {
+        return !state.running ||
+               immediate_requests.load() > immediate_requests_at_start;
+      });
+    }
 
     auto stop_display_callback = [&]() {
       if (immediate_requests.load() > immediate_requests_at_start) {

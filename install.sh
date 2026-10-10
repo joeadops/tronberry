@@ -98,7 +98,7 @@ if systemctl is-active --quiet tronberry; then
 fi
 
 echo "Downloading latest release from GitHub..."
-LATEST_URL=$(curl -s https://api.github.com/repos/tronbyt/tronberry/releases/latest | jq -r '.assets[] | select(.name == "tronberry") | .browser_download_url')
+LATEST_URL=$(curl -s https://api.github.com/repos/joeadops/tronberry/releases/latest | jq -r '.assets[] | select(.name == "tronberry") | .browser_download_url')
 if [ -z "$LATEST_URL" ]; then
   echo "Error: Could not find the latest release URL."
   exit 1
@@ -118,9 +118,11 @@ fi
 
 if [ "$SHOULD_CREATE_SERVICE" = true ]; then
   read -r -p "Enter Tronbyt server URL [http://my-server:8000/device-id/next or ws://my-server:8000/device-id/ws]: " TRONBYT_URL
-  TRONBYT_URL=${TRONBYT_URL:-http://192.168.68.42:8000/d8e59932/next}
+  TRONBYT_URL=${TRONBYT_URL:-ws://localhost:8000/ledmatrix/ws}
 
-  read -r -p "Optionally enter additional command line flags for tronberry (e.g., --led-rows=128 --led-cols=64): " ADDITIONAL_FLAGS
+  DEFAULT_FLAGS="--led-gpio-mapping=adafruit-hat --led-slowdown-gpio=4"
+  read -r -p "Additional command line flags for tronberry [$DEFAULT_FLAGS]: " ADDITIONAL_FLAGS
+  ADDITIONAL_FLAGS=${ADDITIONAL_FLAGS:-$DEFAULT_FLAGS}
 
   echo "Creating tronberry.service..."
   sudo bash -c "cat > $SERVICE_FILE" <<EOL
