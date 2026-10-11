@@ -120,7 +120,7 @@ if [ "$SHOULD_CREATE_SERVICE" = true ]; then
   read -r -p "Enter Tronbyt server URL [http://my-server:8000/device-id/next or ws://my-server:8000/device-id/ws]: " TRONBYT_URL
   TRONBYT_URL=${TRONBYT_URL:-ws://localhost:8000/ledmatrix/ws}
 
-  DEFAULT_FLAGS="--led-gpio-mapping=adafruit-hat --led-slowdown-gpio=4"
+  DEFAULT_FLAGS="--led-gpio-mapping=adafruit-hat --led-slowdown-gpio=4 --black-level=40"
   read -r -p "Additional command line flags for tronberry [$DEFAULT_FLAGS]: " ADDITIONAL_FLAGS
   ADDITIONAL_FLAGS=${ADDITIONAL_FLAGS:-$DEFAULT_FLAGS}
 

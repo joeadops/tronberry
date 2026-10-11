@@ -4,6 +4,7 @@
 #include <sys/reboot.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <chrono>
 #include <condition_variable>
 #include <deque>
@@ -48,6 +49,11 @@ struct AppState {
 };
 
 static AppState *g_app_state = nullptr;
+
+// Pixels whose brightest channel is at or below this value are drawn black.
+// Many apps use near-black backgrounds (e.g. dark navy) that look black on an
+// LCD but light up an LED panel as a dim glow.
+static int g_black_level = 0;
 
 static std::string get_hostname() {
   char buf[256];
@@ -122,8 +128,14 @@ static void DrawFrame(FrameCanvas *canvas, const uint8_t *frame_data, int width,
     for (int x = 0; x < draw_w; ++x) {
       const int src_x = x / scale;
       const int index = (src_y * width + src_x) * 4;  // RGBA
-      canvas->SetPixel(offset_x + x, offset_y + y, frame_data[index],
-                       frame_data[index + 1], frame_data[index + 2]);
+      const uint8_t r = frame_data[index];
+      const uint8_t g = frame_data[index + 1];
+      const uint8_t b = frame_data[index + 2];
+      if (std::max({r, g, b}) <= g_black_level) {
+        canvas->SetPixel(offset_x + x, offset_y + y, 0, 0, 0);
+      } else {
+        canvas->SetPixel(offset_x + x, offset_y + y, r, g, b);
+      }
     }
   }
 }
@@ -279,10 +291,14 @@ static int usage(const char *progname, const char *msg = NULL) {
     std::cerr << msg << std::endl;
   }
   std::cerr << "Fetch images over HTTP and display on RGB-Matrix" << std::endl;
-  std::cerr << "usage: " << progname << " [--verbose] [--transition=MODE] <URL>"
+  std::cerr << "usage: " << progname
+            << " [--verbose] [--transition=MODE] [--black-level=N] <URL>"
             << std::endl;
   std::cerr << "\n  --transition=MODE  Animation between apps: alternate "
                "(default), orbit, pulse or none"
+            << std::endl;
+  std::cerr << "  --black-level=N    Draw pixels whose brightest channel is "
+               "<= N (0-255) as black (default 0, off)"
             << std::endl;
 
   std::cerr << "\nGeneral LED matrix options:" << std::endl;
@@ -317,6 +333,14 @@ int main(int argc, char *argv[]) {
         return usage(argv[0], "Invalid --transition value");
       }
       state.transition_mode = *mode;
+      it = new_argv.erase(it);
+    } else if (strncmp(*it, "--black-level=", 14) == 0) {
+      char *end = nullptr;
+      long level = std::strtol(*it + 14, &end, 10);
+      if (end == *it + 14 || *end != '\0' || level < 0 || level > 255) {
+        return usage(argv[0], "Invalid --black-level value (expected 0-255)");
+      }
+      g_black_level = static_cast<int>(level);
       it = new_argv.erase(it);
     } else {
       ++it;

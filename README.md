@@ -13,6 +13,8 @@ This fork tracks [tronbyt/tronberry](https://github.com/tronbyt/tronberry) and a
 
 By default the two alternate. Choose one, or turn them off, with `--transition=alternate|orbit|pulse|none`.
 
+It also adds `--black-level=N`, which draws any pixel whose brightest channel is N or less as black. Many apps use near-black backgrounds, such as dark navy, that look black on a monitor but glow faintly on an LED panel. The installer defaults to `--black-level=40`.
+
 The installer defaults to a 64x32 panel on an Adafruit RGB Matrix HAT (`--led-gpio-mapping=adafruit-hat --led-slowdown-gpio=4`). A Pi 4 or CM4 drives the GPIO pins too fast for most panels at lower slowdown values, which shows up as sparkly static around lit pixels.
 
 ### Running the server on the same Pi
